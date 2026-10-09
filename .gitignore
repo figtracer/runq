@@ -1,0 +1,8 @@
+/target/
+/results/
+/runs/
+/dist/
+/bin/
+*.tar.gz
+__pycache__/
+.DS_Store
