@@ -54,7 +54,8 @@ with tempfile.TemporaryDirectory(prefix="rq-bench-", dir="/tmp") as directory:
     env = {**os.environ, "RUNQ_SOCKET": directory + "/s"}
     env.pop("RUNQ_JOB_ID", None)
     for key in ("MallocNanoZone", "MallocSpaceEfficient", "MallocMaxMagazines",
-                "_RUNQ_ALLOCATOR_READY", "_RUNQ_ORIGINAL_MALLOC_MAX_MAGAZINES"):
+                "_RUNQ_ALLOCATOR_READY", "_RUNQ_ORIGINAL_MALLOC_MAX_MAGAZINES",
+                "_RUNQ_ORIGINAL_MALLOC_NANO_ZONE"):
         env.pop(key, None)
     children = []
     with open(directory + "/daemon.log", "w+") as log:

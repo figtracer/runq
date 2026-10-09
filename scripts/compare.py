@@ -98,7 +98,8 @@ def run_trial(name, paths, seconds, status_queries=0):
         env = dict(os.environ)
         # Avoid inheriting queue and allocator overrides from the caller.
         for key in ("RUNQ_JOB_ID", "MallocNanoZone", "MallocSpaceEfficient", "MallocMaxMagazines",
-                    "_RUNQ_ALLOCATOR_READY", "_RUNQ_ORIGINAL_MALLOC_MAX_MAGAZINES"):
+                    "_RUNQ_ALLOCATOR_READY", "_RUNQ_ORIGINAL_MALLOC_MAX_MAGAZINES",
+                    "_RUNQ_ORIGINAL_MALLOC_NANO_ZONE"):
             env.pop(key, None)
         starts = directory / "starts"
         script = f"echo $$ >> {shlex.quote(str(starts))}; exec /bin/sleep 300"

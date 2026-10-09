@@ -76,12 +76,40 @@ another paired run, so that variant was dropped. A smaller initial PID buffer
 also failed to show a reliable aggregate memory reduction and was dropped.
 Assembly was not needed for the retained change.
 
+## Current allocator policy
+
+runq now disables the macOS nano allocator for its managers, alongside the
+existing one-cache policy. [Apple's allocator source](https://github.com/apple-oss-distributions/libmalloc/blob/main/src/nano_malloc_common.c)
+defines the `MallocNanoZone=0` override. Workloads receive their original settings;
+this does not tune Cargo's allocator or change its environment.
+
+A separate three-trial comparison against `a1d0542` measured the delivered
+implementation, including environment restoration:
+
+| Metric | Before | After |
+|---|---:|---:|
+| Executable | 155,936 bytes | 155,952 bytes |
+| Idle broker | 0.907 MiB | 0.813 MiB |
+| Broker + one supervisor | 1.860 MiB | 1.672 MiB |
+| Broker + eight clients | 8.206 MiB | 7.362 MiB |
+| Eight-client range | 8.190–8.206 MiB | 7.331–7.362 MiB |
+
+The eight-client saving was 10.3%. Three paired 20-run launch trials measured
+20.8 ms before and 21.0 ms after for wrapped `true`; this is not compiler throughput.
+An earlier environment-only probe saved 12%, but that probe passed the setting
+to the workload and is not the delivered result.
+The remaining large opportunity is reducing supervisor count. A shared caller
+could submit several jobs, but separate foreground callers still need their own
+waiting processes. No batch or detached command is included.
+
 The compact executable passed 20 process integration tests on macOS. Formatting,
-Clippy, two Rust unit tests, and the standard release build also passed. Its
-SHA-256 is:
+Clippy, two Rust unit tests, and the standard release build also passed. The
+allocator check covers nine combinations of unset and explicit original settings.
+CLI, wire frames, inherited IO, and cleanup behavior are unchanged. Linux remains
+untested. The current compact executable's SHA-256 is:
 
 ```text
-4b4a66be728b93aca54406ed15a440ad2ea1a3625a78c7cef875881956289719
+638a582b30797e8ebd24342ff7474c485b7de70ae4420b0b8c9eec120fbcb5b1
 ```
 
 ## Reproduce

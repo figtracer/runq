@@ -49,9 +49,10 @@ default backtrace feature. This reduces file size; it is not a 10× RAM improvem
 ## Runtime policy
 
 On macOS, the broker and supervisors self-exec once with `MallocMaxMagazines=1`
-to use one allocator cache set for their single thread. The launch helper restores
-the caller's original setting and removes internal variables before the workload
-starts. This saves steady RAM at some startup cost. Linux does not use this policy.
+and `MallocNanoZone=0`. One cache set without a nano zone reduces their steady
+footprint. The launch helper restores both original settings, including absence,
+and removes internal variables before the workload starts. This policy adds
+startup work and does not apply to Linux.
 
 Keep the signal wakeup, launch-registration gate, and cleanup guards intact.
 Idle processes block in `poll`. Memory enforcement is sampled, never a hard limit.
@@ -68,9 +69,11 @@ python3 scripts/compare.py --runq /path/to/runq \
   --runq-before /path/to/previous/runq --trials 3 --seconds 2
 ```
 
-For the compact macOS build, also pass `--max-binary-kib 160 --max-manager-mib 9`
+For the compact macOS build, also pass `--max-binary-kib 160 --max-manager-mib 8`
 to `measure.py`. These local regression budgets allow headroom above 152 KiB and
-8.19 MiB while catching a return to the previous 347 KiB / 9.42 MiB results.
+7.36 MiB while catching a return to the previous 8.2 MiB footprint. The 8 MiB
+manager budget follows the paired allocator measurements; the file budget still
+catches a return to the previous 347 KiB build.
 They are not allocator limits. Harnesses write raw JSON under ignored `results/`.
 The comparator accepts isolated competitor executables:
 

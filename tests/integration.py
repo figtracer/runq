@@ -104,20 +104,25 @@ print(open_fds)
 
     @unittest.skipUnless(sys.platform == "darwin", "macOS allocator policy")
     def test_allocator_policy_does_not_change_workload_environment(self):
-        script = "import os; print(repr(os.environ.get('MallocMaxMagazines'))); print(sorted(k for k in os.environ if k in ('_RUNQ_ALLOCATOR_READY', '_RUNQ_ORIGINAL_MALLOC_MAX_MAGAZINES')))"
-        for value in (None, "1", "2"):
-            with self.subTest(original=value):
-                env = dict(self.env)
-                env.pop("_RUNQ_ALLOCATOR_READY", None)
-                env.pop("_RUNQ_ORIGINAL_MALLOC_MAX_MAGAZINES", None)
-                if value is None:
-                    env.pop("MallocMaxMagazines", None)
-                else:
-                    env["MallocMaxMagazines"] = value
-                r = subprocess.run([str(BIN), "exec", "--", PYTHON, "-c", script],
-                                   env=env, capture_output=True, text=True, timeout=8)
-                self.assertEqual(r.returncode, 0, r.stderr)
-                self.assertEqual(r.stdout.splitlines(), [repr(value), "[]"], r.stderr)
+        keys = ("MallocMaxMagazines", "MallocNanoZone")
+        internal = ("_RUNQ_ALLOCATOR_READY", "_RUNQ_ORIGINAL_MALLOC_MAX_MAGAZINES",
+                    "_RUNQ_ORIGINAL_MALLOC_NANO_ZONE")
+        script = f"import os; print(repr(tuple(os.environ.get(k) for k in {keys!r}))); print(sorted(k for k in os.environ if k in {internal!r}))"
+        for magazines in (None, "1", "2"):
+            for nano in (None, "0", "1"):
+                with self.subTest(magazines=magazines, nano=nano):
+                    env = dict(self.env)
+                    for key in internal:
+                        env.pop(key, None)
+                    for key, value in zip(keys, (magazines, nano)):
+                        if value is None:
+                            env.pop(key, None)
+                        else:
+                            env[key] = value
+                    r = subprocess.run([str(BIN), "exec", "--", PYTHON, "-c", script],
+                                       env=env, capture_output=True, text=True, timeout=8)
+                    self.assertEqual(r.returncode, 0, r.stderr)
+                    self.assertEqual(r.stdout.splitlines(), [repr((magazines, nano)), "[]"], r.stderr)
 
     def test_commands_serialize_across_clients(self):
         marker = self.root / "first"

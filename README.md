@@ -36,7 +36,7 @@ so builds and tests stay serialized until the command finishes.
 
 One executable, one dependency (`libc`), no async runtime, and no worker threads.
 Commands inherit their IO. The broker keeps no output or completed-job history.
-The optional compact build measured **152 KiB**, **0.91 MiB idle**, and **8.19 MiB
+The optional compact build measured **152 KiB**, **0.81 MiB idle**, and **7.36 MiB
 with eight clients** on Apple Silicon macOS ([method and limits](docs/results.md)).
 
 [Compare with Task Spooler, Pueue, MemMux, and GNU Parallel](docs/results.md#existing-tools).
