@@ -48,36 +48,33 @@ pub struct Usage {
 #[cfg(target_os = "macos")]
 const ALLOCATOR_READY: &str = "_RUNQ_ALLOCATOR_READY";
 #[cfg(target_os = "macos")]
-const ALLOCATOR_POLICY: [(&str, &str, &str); 2] = [
-    (
-        "MallocMaxMagazines",
-        "1",
-        "_RUNQ_ORIGINAL_MALLOC_MAX_MAGAZINES",
-    ),
-    ("MallocNanoZone", "0", "_RUNQ_ORIGINAL_MALLOC_NANO_ZONE"),
-];
+const ORIGINAL_MAGAZINES: &str = "_RUNQ_ORIGINAL_MALLOC_MAX_MAGAZINES";
+#[cfg(target_os = "macos")]
+const ORIGINAL_NANO: &str = "_RUNQ_ORIGINAL_MALLOC_NANO_ZONE";
 
 pub fn configure_allocator() -> io::Result<()> {
     #[cfg(target_os = "macos")]
     {
         if std::env::var_os(ALLOCATOR_READY).is_some()
-            || ALLOCATOR_POLICY.iter().all(|&(key, value, _)| {
-                std::env::var_os(key).is_some_and(|current| current == value)
-            })
+            || (std::env::var_os("MallocMaxMagazines").is_some_and(|value| value == "1")
+                && std::env::var_os("MallocNanoZone").is_some_and(|value| value == "0"))
         {
             return Ok(());
         }
         let mut command = Command::new(std::env::current_exe()?);
         command
             .args(std::env::args_os().skip(1))
+            .env("MallocMaxMagazines", "1")
+            .env("MallocNanoZone", "0")
             .env(ALLOCATOR_READY, "1");
-        for (key, value, original) in ALLOCATOR_POLICY {
-            command.env(key, value);
-            match std::env::var_os(key) {
-                Some(value) => command.env(original, value),
-                None => command.env_remove(original),
-            };
-        }
+        match std::env::var_os("MallocMaxMagazines") {
+            Some(value) => command.env(ORIGINAL_MAGAZINES, value),
+            None => command.env_remove(ORIGINAL_MAGAZINES),
+        };
+        match std::env::var_os("MallocNanoZone") {
+            Some(value) => command.env(ORIGINAL_NANO, value),
+            None => command.env_remove(ORIGINAL_NANO),
+        };
         Err(command.exec())
     }
     #[cfg(not(target_os = "macos"))]
@@ -87,14 +84,18 @@ pub fn configure_allocator() -> io::Result<()> {
 pub fn restore_workload_allocator(command: &mut Command) {
     #[cfg(target_os = "macos")]
     if std::env::var_os(ALLOCATOR_READY).is_some() {
-        for (key, _, original) in ALLOCATOR_POLICY {
-            match std::env::var_os(original) {
-                Some(value) => command.env(key, value),
-                None => command.env_remove(key),
-            };
-            command.env_remove(original);
-        }
-        command.env_remove(ALLOCATOR_READY);
+        match std::env::var_os(ORIGINAL_MAGAZINES) {
+            Some(value) => command.env("MallocMaxMagazines", value),
+            None => command.env_remove("MallocMaxMagazines"),
+        };
+        match std::env::var_os(ORIGINAL_NANO) {
+            Some(value) => command.env("MallocNanoZone", value),
+            None => command.env_remove("MallocNanoZone"),
+        };
+        command
+            .env_remove(ALLOCATOR_READY)
+            .env_remove(ORIGINAL_MAGAZINES)
+            .env_remove(ORIGINAL_NANO);
     }
     #[cfg(not(target_os = "macos"))]
     let _ = command;

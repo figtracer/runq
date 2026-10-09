@@ -71,7 +71,7 @@ python3 scripts/compare.py --runq /path/to/runq \
 
 For the compact macOS build, also pass `--max-binary-kib 160 --max-manager-mib 8`
 to `measure.py`. These local regression budgets allow headroom above 152 KiB and
-7.36 MiB while catching a return to the previous 8.2 MiB footprint. The 8 MiB
+7.22 MiB while catching a return to the previous 8.2 MiB footprint. The 8 MiB
 manager budget follows the paired allocator measurements; the file budget still
 catches a return to the previous 347 KiB build.
 They are not allocator limits. Harnesses write raw JSON under ignored `results/`.

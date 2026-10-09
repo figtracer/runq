@@ -80,24 +80,32 @@ Assembly was not needed for the retained change.
 
 runq now disables the macOS nano allocator for its managers, alongside the
 existing one-cache policy. [Apple's allocator source](https://github.com/apple-oss-distributions/libmalloc/blob/main/src/nano_malloc_common.c)
-defines the `MallocNanoZone=0` override. Workloads receive their original settings;
-this does not tune Cargo's allocator or change its environment.
+defines the `MallocNanoZone=0` override. The launch helper restores the caller's
+original settings before executing the workload.
 
-A separate three-trial comparison against `a1d0542` measured the delivered
-implementation, including environment restoration:
+Three paired trials against `a1d0542`, with caller allocator overrides cleared,
+measured the delivered implementation including environment restoration:
 
 | Metric | Before | After |
 |---|---:|---:|
 | Executable | 155,936 bytes | 155,952 bytes |
-| Idle broker | 0.907 MiB | 0.813 MiB |
-| Broker + one supervisor | 1.860 MiB | 1.672 MiB |
-| Broker + eight clients | 8.206 MiB | 7.362 MiB |
-| Eight-client range | 8.190–8.206 MiB | 7.331–7.362 MiB |
+| Idle broker | 0.907 MiB | 0.797 MiB |
+| Broker + one supervisor | 1.860 MiB | 1.641 MiB |
+| Broker + eight clients | 8.190 MiB | 7.221 MiB |
+| Eight-client range | 8.190–8.237 MiB | 7.221–7.237 MiB |
 
-The eight-client saving was 10.3%. Three paired 20-run launch trials measured
-20.8 ms before and 21.0 ms after for wrapped `true`; this is not compiler throughput.
-An earlier environment-only probe saved 12%, but that probe passed the setting
-to the workload and is not the delivered result.
+That is 11.8% less manager memory with eight clients. Another three paired trials
+inherited `MallocNanoZone=0` in both builds, matching the observed Codex setting.
+Both measured 7.237 MiB at eight clients: no additional saving or median regression.
+
+The optimization helps when the caller has not already disabled nano. This Codex
+session already sets `MallocNanoZone=0`, so these default-environment savings do
+not imply an equivalent reduction for existing Codex-launched jobs.
+
+A table-driven implementation increased the eight-client footprint by 0.14 MiB
+when nano was already disabled. Explicit handling of the two settings replaced
+that implementation. The earlier environment-only probe is not a shipped build.
+
 The remaining large opportunity is reducing supervisor count. A shared caller
 could submit several jobs, but separate foreground callers still need their own
 waiting processes. No batch or detached command is included.
@@ -109,7 +117,7 @@ CLI, wire frames, inherited IO, and cleanup behavior are unchanged. Linux remain
 untested. The current compact executable's SHA-256 is:
 
 ```text
-638a582b30797e8ebd24342ff7474c485b7de70ae4420b0b8c9eec120fbcb5b1
+696866a6b5c7e0707cdd81c7310df04c84352033158c3e03eba11e5c167a2770
 ```
 
 ## Reproduce
