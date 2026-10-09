@@ -2,7 +2,7 @@
 
 **A small Rust queue for memory-heavy validation commands.**
 
-[Commands](docs/cli.md) · [Measurements](docs/results.md) · [Development](docs/dev/README.md) · [Agent guide](AGENTS.md)
+[Commands](docs/cli.md) · [Comparisons](docs/results.md) · [Development](docs/dev/README.md) · [Agent guide](AGENTS.md)
 
 runq reserves memory and CPU capacity before starting a command. It caps Cargo
 and test workers, then stops process groups that exceed a sampled memory budget.
@@ -38,6 +38,9 @@ One executable, one dependency (`libc`), no async runtime, and no worker threads
 Commands inherit their IO. The broker keeps no output or completed-job history.
 The optional compact build measured **152 KiB**, **0.91 MiB idle**, and **8.19 MiB
 with eight clients** on Apple Silicon macOS ([method and limits](docs/results.md)).
+
+[Compare with Task Spooler, Pueue, MemMux, and GNU Parallel](docs/results.md#existing-tools).
+Foreground and detached modes retain different numbers of processes.
 
 ## Limits
 
