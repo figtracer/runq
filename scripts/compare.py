@@ -5,6 +5,7 @@ No downloads, installs, real coding agents, or global configuration changes.
 Each trial runs alone, with one sleeping workload and seven waiting jobs.
 """
 import argparse
+from contextlib import ExitStack
 import ctypes
 import hashlib
 import json
@@ -13,7 +14,9 @@ from pathlib import Path
 import platform
 import shlex
 import signal
+import socket
 import statistics
+import struct
 import subprocess
 import tempfile
 import time
@@ -57,7 +60,39 @@ def wait_until(predicate, seconds=15):
         time.sleep(.05)
 
 
-def run_trial(name, paths, seconds):
+def status_probe(path, pid, requests):
+    # Eight real clients already exist. Fill the remaining job slots with leases,
+    # leaving the 64th connection for status. These leases do not run workloads.
+    with ExitStack() as leases:
+        for _ in range(55):
+            conn = leases.enter_context(socket.socket(socket.AF_UNIX))
+            conn.settimeout(5)
+            conn.connect(path)
+            conn.sendall(struct.pack("<4Q", 1, 0, 0, 0))  # SUBMIT
+            with conn.makefile("rb") as reader:
+                assert struct.unpack("<4Q", reader.read(32))[0] == 10  # QUEUED
+        before = usage(pid)
+        start = time.monotonic_ns()
+        for _ in range(requests):
+            with socket.socket(socket.AF_UNIX) as conn:
+                conn.settimeout(5)
+                conn.connect(path)
+                conn.sendall(struct.pack("<4Q", 4, 0, 0, 0))  # STATUS
+                with conn.makefile("rb") as reader:
+                    frames = list(struct.iter_unpack("<4Q", reader.read()))
+            assert len(frames) == 128 and frames[0][0] == 15 and frames[0][3] == 63
+            assert frames[-1][0] == 18
+            assert sum(f[0] == 16 for f in frames) == 63
+            assert sum(f[0] == 17 for f in frames) == 63
+            assert sum(f[2] == 2 for f in frames if f[0] == 16) == 1
+        elapsed = time.monotonic_ns() - start
+        after = usage(pid)
+        return {"requests": requests, "jobs": 63, "synthetic_leases": 55,
+                "broker_memory_bytes": after["memory_bytes"], "seconds": elapsed / 1e9,
+                "broker_cpu_ms": (after["cpu_ns"] - before["cpu_ns"]) / 1e6}
+
+
+def run_trial(name, paths, seconds, status_queries=0):
     with tempfile.TemporaryDirectory(prefix="rq-cmp-", dir="/tmp") as raw:
         directory = Path(raw)
         env = dict(os.environ)
@@ -193,6 +228,8 @@ def run_trial(name, paths, seconds):
             result["eight_status"] = status()
             if name.startswith("runq"):
                 assert result["eight_status"].count("queued") == 7
+                if status_queries:
+                    result["status_queries"] = status_probe(env["RUNQ_SOCKET"], daemon.pid, status_queries)
             elif name == "pueue":
                 states = [t["status"] for t in json.loads(result["eight_status"])["tasks"].values()]
                 assert sum("Queued" in s for s in states) == 7, states
@@ -240,12 +277,14 @@ if __name__ == "__main__":
         parser.add_argument("--" + key)
     parser.add_argument("--trials", type=int, default=3)
     parser.add_argument("--seconds", type=float, default=2)
+    parser.add_argument("--status-queries", type=int, default=0,
+                        help="optional runq-only status probe with 63 jobs; 55 use synthetic leases")
     parser.add_argument("--output", default="results/comparison.json")
     args = parser.parse_args()
     if platform.system() != "Darwin":
         parser.error("this comparison uses macOS physical footprint")
-    if args.trials < 1 or args.seconds <= 0:
-        parser.error("trials and seconds must be positive")
+    if args.trials < 1 or args.seconds <= 0 or args.status_queries < 0:
+        parser.error("trials and seconds must be positive; status-queries must be nonnegative")
     if bool(args.pueue) != bool(args.pueued):
         parser.error("provide both pueue and pueued")
     paths = {k.replace("_", "-"): str(Path(v).resolve()) for k, v in vars(args).items()
@@ -270,7 +309,7 @@ if __name__ == "__main__":
         # Reverse alternate trials to reduce systematic order bias.
         for name in names if trial % 2 == 0 else reversed(names):
             print(f"trial {trial + 1}: {name}", flush=True)
-            result = run_trial(name, paths, args.seconds)
+            result = run_trial(name, paths, args.seconds, args.status_queries)
             result["trial"] = trial + 1
             report["trials"].append(result)
             output.write_text(json.dumps(report, indent=2) + "\n")
@@ -283,4 +322,8 @@ if __name__ == "__main__":
             field: statistics.median(row[stage][field] for row in rows)
             for field in ("manager_memory_bytes", "persistent_cpu_percent_one_core")}
             for stage in ("idle", "one", "eight", "eight_wait_clients") if rows[0].get(stage)}
+        if rows[0].get("status_queries"):
+            report["medians"][name]["status_queries"] = {
+                field: statistics.median(row["status_queries"][field] for row in rows)
+                for field in ("broker_memory_bytes", "seconds", "broker_cpu_ms")}
     output.write_text(json.dumps(report, indent=2) + "\n")

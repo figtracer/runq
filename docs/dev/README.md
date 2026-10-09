@@ -72,6 +72,18 @@ For the compact macOS build, also pass `--max-binary-kib 160 --max-manager-mib 9
 to `measure.py`. These local regression budgets allow headroom above 152 KiB and
 8.19 MiB while catching a return to the previous 347 KiB / 9.42 MiB results.
 They are not allocator limits. Harnesses write raw JSON under ignored `results/`.
-The comparator accepts optional isolated competitor executables; see `--help`.
+The comparator accepts isolated competitor executables:
+
+```sh
+python3 scripts/compare.py --runq /path/to/runq \
+  --task-spooler /path/to/ts --pueue /path/to/pueue --pueued /path/to/pueued \
+  --memmux /path/to/memmuxd --parallel /path/to/parallel --trials 3 --seconds 2
+```
+
+To measure broker response costs, add `--status-queries 500` to the paired
+runq command. After measuring eight real clients, this opens 55 synthetic queued
+leases. Each of 500 status responses must describe all 63 jobs. It records only
+broker CPU and memory for this probe. It does not simulate 63 foreground
+processes or measure task throughput. No additional workload starts.
 
 [Recorded measurements](../results.md) · [Commands](../cli.md) · [README](../../README.md)

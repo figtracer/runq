@@ -1,5 +1,4 @@
 use std::{
-    collections::VecDeque,
     fs::{self, OpenOptions},
     io::{self, Read, Write},
     os::{
@@ -57,7 +56,7 @@ struct Client {
     stream: UnixStream,
     input: [u8; SIZE],
     read: usize,
-    output: VecDeque<[u8; SIZE]>,
+    output: Vec<u8>,
     written: usize,
     job: Option<Job>,
     connected: bool,
@@ -67,7 +66,7 @@ struct Client {
 
 impl Client {
     fn reply(&mut self, frame: Frame) {
-        self.output.push_back(encode(frame));
+        self.output.extend_from_slice(&encode(frame));
     }
 
     fn stop(&mut self, reason: u64) {
@@ -320,7 +319,7 @@ fn serve(listener: UnixListener, config: Config, signals: os::Signals) -> io::Re
                             stream,
                             input: [0; SIZE],
                             read: 0,
-                            output: VecDeque::new(),
+                            output: Vec::new(),
                             written: 0,
                             job: None,
                             connected: true,
@@ -500,16 +499,10 @@ fn read_frame(client: &mut Client) -> io::Result<Option<Frame>> {
 }
 
 fn flush(client: &mut Client) {
-    while let Some(frame) = client.output.front() {
-        match client.stream.write(&frame[client.written..]) {
+    while client.written < client.output.len() {
+        match client.stream.write(&client.output[client.written..]) {
             Ok(0) => break,
-            Ok(count) => {
-                client.written += count;
-                if client.written == SIZE {
-                    client.output.pop_front();
-                    client.written = 0;
-                }
-            }
+            Ok(count) => client.written += count,
             Err(error)
                 if error.kind() == io::ErrorKind::WouldBlock
                     || error.kind() == io::ErrorKind::Interrupted =>
@@ -520,8 +513,12 @@ fn flush(client: &mut Client) {
                 client.connected = false;
                 client.output.clear();
                 client.stop(CANCELLED);
-                break;
+                return;
             }
         }
+    }
+    if client.written == client.output.len() {
+        client.output.clear();
+        client.written = 0;
     }
 }
